@@ -1,0 +1,65 @@
+﻿# ==========================================
+# 專案名稱：電光證照霸 PRO (ElectroSolar Pass)
+// 檔案：ios/Podfile
+# 說明：[iOS 原生依賴配置] 強制升級 iOS 14.0，相容 StoreKit 原生金流
+# ==========================================
+
+# 強制宣告全局最低支援版本為 iOS 14.0 (StoreKit API 強制要求)
+platform :ios, '14.0'
+
+# 關閉 CocoaPods 遙測數據回傳，加速本機與 CI/CD 的 pod install 執行速度
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# 定義 Flutter 與 Xcode 編譯模式的嚴格對映
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+# 動態解析 Flutter 安裝根目錄 (自 Generated.xcconfig 萃取)
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} 遺失。請在專案根目錄先執行 `flutter pub get` 以生成設定檔。"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT 未在 #{generated_xcode_build_settings_path} 中找到。請嘗試刪除該檔後重新執行 `flutter pub get`。"
+end
+
+# 載入 Flutter 官方提供的 CocoaPods 輔助腳本
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+# 執行 Flutter iOS 環境初始化
+flutter_ios_podfile_setup
+
+# 配置主專案 Target
+target 'Runner' do
+  # 強制使用動態框架 (Swift 撰寫的套件如 in_app_purchase 必須依賴此設定)
+  use_frameworks!
+  use_modular_headers!
+
+  # 安裝 pubspec.yaml 中宣告的所有原生 iOS 依賴庫
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+end
+
+# 編譯後處理攔截器 (Post-install Hook)
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    # 載入 Flutter 預設的額外編譯設定
+    flutter_additional_ios_build_settings(target)
+    
+    target.build_configurations.each do |config|
+      # 1. 強制關閉 Bitcode (Apple 已全面禁止包含 Bitcode 的 App 上架)
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      
+      # 2. 強制將所有第三方套件的部署底線對齊主專案 (iOS 14.0)
+      # 杜絕 Xcode 產生 "The iOS Simulator deployment target is set to 11.0" 等擾人警告
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+    end
+  end
+end

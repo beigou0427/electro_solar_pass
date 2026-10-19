@@ -1,0 +1,33 @@
+﻿default_platform(:ios)
+
+platform :ios do
+  desc "🚀 一鍵打包並上傳至 App Store Connect (TestFlight)"
+  lane :beta do
+    # 1. 載入 App Store Connect API 實名金鑰
+    app_store_connect_api_key(
+      key_id: "853IQM8TC6VX",
+      issuer_id: "7c8a4cba-398c-4e88-88bb-9252f72ecdc9",
+      key_filepath: "~/.appstoreconnect/private_keys/AuthKey_853IQM8TC6VX.p8",
+      in_house: false
+    )
+
+    # 2. 自動同步憑證與 Provisioning Profile (Match 機制)
+    # match(type: "appstore", app_identifier: "com.electrosolar.pass.pro")
+
+    # 3. 遞增 Build Number
+    increment_build_number(build_number: ENV["BUILD_NUMBER"])
+
+    # 4. 執行 Flutter 原生編譯與 IPA 打包
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+      output_directory: "build/ios/ipa"
+    )
+
+    # 5. 上傳至 TestFlight 並提交審查
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true
+    )
+  end
+end

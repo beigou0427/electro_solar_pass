@@ -1,0 +1,48 @@
+name: electro_solar_pass
+description: "電光證照霸 PRO"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  in_app_purchase: ^3.3.1
+  http: ^1.6.0
+  dart_jsonwebtoken: ^3.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.6
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+
+flutter_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/app_icon_master.png"
+  remove_alpha_ios: true
+  adaptive_icon_background: "#0F172A"
+  adaptive_icon_foreground: "assets/images/app_icon_master.png"
+
+flutter_native_splash:
+  color: "#0F172A"
+  color_dark: "#020617"
+  image: "assets/images/app_icon_master.png"
+  image_dark: "assets/images/app_icon_master.png"
+  web: false # 🛡️ 關閉 Web 生成，避開 1x1 像素編碼 Bug
+  android_12:
+    color: "#0F172A"
+    color_dark: "#020617"
+    image: "assets/images/app_icon_master.png"
+    image_dark: "assets/images/app_icon_master.png"
+  fullscreen: true

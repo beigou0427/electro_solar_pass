@@ -1,0 +1,3 @@
+﻿app_identifier("com.electrosolar.pass.pro") # App 的 Bundle ID
+apple_id("bagelj04a09@gmail.com")            # 您的 Apple ID
+team_id("CB23U8Z3HS")                        # 您的 Apple 開發者 Team ID

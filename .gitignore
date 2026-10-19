@@ -1,0 +1,98 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# App Store Connect Credentials
+env_load.ps1
+env_load.sh
+*.p8
+AuthKey_*.p8
+private_keys/
+
+
+# App Store Connect Credentials
+env_load.ps1
+env_load.sh
+*.p8
+AuthKey_*.p8
+private_keys/
+
+
+# App Store Connect Credentials
+env_load.ps1
+env_load.sh
+*.p8
+AuthKey_*.p8
+private_keys/
+
+
+# ==========================================
+# 🛡️ 企業級資安封鎖線 (嚴禁提交至版控)
+# ==========================================
+# 1. Apple 憑證與金流沙盒
+*.p8
+*.storekit
+ExportOptions.plist
+deploy_testflight.sh
+
+# 2. 本機環境變數與私鑰
+.env
+*.jks
+*.keystore
+key.properties
+
+# 3. 戰鬥持久化快取狀態
+.storage_battle_state.dat
+*.log
+
+# 4. Flutter 構建產物
+/build/
+/.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+
+*.p8
+asc_auto_provision.dart

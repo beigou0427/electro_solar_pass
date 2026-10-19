@@ -1,0 +1,5 @@
+﻿# 自動上傳 Metadata 至 App Store Connect
+app_identifier "com.electrosolar.pass.pro"
+submit_for_review false # 設為 false，上傳完畢後先保留在後台，供您確認後再送審
+automatic_release true  # 審查通過後自動上架
+force true              # 跳過 HTML 預覽確認，全自動化執行

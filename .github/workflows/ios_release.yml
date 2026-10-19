@@ -1,0 +1,58 @@
+﻿# ==========================================
+# 專案名稱：電光證照霸 PRO (ElectroSolar Pass)
+# 檔案：.github/workflows/ios_release.yml
+# COO 注入：Jeff Williams (Apple) - 第 3/3 段：金標雲端 iOS 打包產線
+# 說明：[終極大滿貫] 免費調用雲端 macOS 伺服器，自動化通過 PVT 並產出 .ipa 檔案
+# ==========================================
+
+name: 🍏 iOS Golden Master Release Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: # 支援在 GitHub 網頁上手動點擊一鍵觸發打包
+
+jobs:
+  build-and-certify-ios:
+    name: 🚀 雲端 macOS 自動化構建與 PVT 驗收
+    runs-on: macos-latest # 免費調用微軟雲端真實 Mac 實體機
+
+    steps:
+      # 1. 檢出專案完整程式碼
+      - name: 📥 檢出程式碼 (Checkout)
+        uses: actions/checkout@v4
+
+      # 2. 配置 Flutter 開發環境
+      - name: 🛠️ 安裝 Flutter SDK (Stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 3. 解析相依性套件
+      - name: 📦 安裝相依套件 (Pub Get)
+        run: flutter pub get
+
+      # 4. 【Jeff Williams 鋼鐵閘門】：執行純 Dart PVT 零缺陷自動化稽核
+      - name: 🛡️ 執行 Apple PVT 品質稽核 (Zero Defect Gate)
+        run: dart run tools/cqo_quality_audit.dart
+
+      # 5. 編譯 iOS 生產級原生產物 (Release Build)
+      - name: 🍏 編譯 iOS 原生程式碼 (No CodeSign)
+        run: flutter build ios --release --no-codesign
+
+      # 6. 自動封裝為標準 .ipa 安裝包
+      - name: 📦 封裝 .ipa 檔案 (Package IPA)
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r electro_solar_pass_golden_master.ipa Payload
+          rm -rf Payload
+
+      # 7. 將 .ipa 發布為 GitHub Artifact 供執行長直接下載
+      - name: 📤 上傳 iOS .ipa 金標產物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ElectroSolarPass-iOS-GoldenMaster
+          path: electro_solar_pass_golden_master.ipa
+          retention-days: 14
