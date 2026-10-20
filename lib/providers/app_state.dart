@@ -1,7 +1,7 @@
 ﻿// ==========================================
 // 專案名稱：電光證照霸 PRO (ElectroSolar Pass)
 // 檔案：lib/providers/app_state.dart
-// 說明：[全域狀態完全體] 整合本地磁區持久化、FSRS 記憶、Git 分支、DDD 技能樹與心流調控
+// 說明：[全域狀態完全體] 整合連勝防護卡、FSRS 記憶、Git 分支、DDD 技能樹
 // ==========================================
 
 import 'dart:async';
@@ -23,6 +23,8 @@ import '../utils/app_persistence.dart';
 class EnhancedUserProfile extends UserProfile {
   int currentStreak;
   int longestStreak;
+  int streakFreezes; // 🛡️ 連勝防護卡數量 (預設贈送 2 張)
+  int streakFreezesUsed; // 統計保護成功次數
   DateTime? lastLoginDate;
 
   EnhancedUserProfile({
@@ -32,6 +34,8 @@ class EnhancedUserProfile extends UserProfile {
     super.bookmarkedIds = const [],
     this.currentStreak = 0,
     this.longestStreak = 0,
+    this.streakFreezes = 2,
+    this.streakFreezesUsed = 0,
     this.lastLoginDate,
   });
 
@@ -40,6 +44,8 @@ class EnhancedUserProfile extends UserProfile {
       'tier': licenseTier.value,
       'currentStreak': currentStreak,
       'longestStreak': longestStreak,
+      'streakFreezes': streakFreezes,
+      'streakFreezesUsed': streakFreezesUsed,
       'lastLogin': lastLoginDate?.toIso8601String(),
       'mastered': masteredIds,
       'wrong': wrongQueueIds,
@@ -56,6 +62,8 @@ class EnhancedUserProfile extends UserProfile {
       licenseTier: tier,
       currentStreak: map['currentStreak'] ?? 0,
       longestStreak: map['longestStreak'] ?? 0,
+      streakFreezes: map['streakFreezes'] ?? 2,
+      streakFreezesUsed: map['streakFreezesUsed'] ?? 0,
       lastLoginDate: map['lastLogin'] != null ? DateTime.tryParse(map['lastLogin']) : null,
       masteredIds: List<String>.from(map['mastered'] ?? []),
       wrongQueueIds: List<String>.from(map['wrong'] ?? []),
@@ -161,6 +169,81 @@ class AppState extends ChangeNotifier {
   int get totalQuestions => _allQuestions.length;
   int get masteredCount => _profile.masteredIds.length;
   int get wrongCount => _profile.wrongQueueIds.length;
+
+  // --- FSRS 瀕危遺忘考題卡包 (Due Deck) ---
+  int get dueForReviewCount {
+    int count = 0;
+    for (final state in _memoryStates.values) {
+      if (AdvancedMemoryEngine.isDueForReview(state)) count++;
+    }
+    return count;
+  }
+
+  List<QuestionItem> get dueQuestions {
+    final dueIds = _memoryStates.entries
+        .where((e) => AdvancedMemoryEngine.isDueForReview(e.value))
+        .map((e) => e.key)
+        .toSet();
+    return _allQuestions.where((q) => dueIds.contains(q.id)).toList();
+  }
+
+  // --- 連勝打卡與連勝防護卡 (Streak Freeze) 演算法 ---
+  void _processDailyLoginStreak() {
+    final now = DateTime.now();
+    if (_profile.lastLoginDate == null) {
+      _profile.currentStreak = 1;
+      _profile.longestStreak = 1;
+    } else {
+      final last = _profile.lastLoginDate!;
+      final lastMidnight = DateTime(last.year, last.month, last.day);
+      final nowMidnight = DateTime(now.year, now.month, now.day);
+      final daysDiff = nowMidnight.difference(lastMidnight).inDays;
+
+      if (daysDiff == 1) {
+        // 正常隔日登入，連勝 +1
+        _profile.currentStreak++;
+        if (_profile.currentStreak > _profile.longestStreak) {
+          _profile.longestStreak = _profile.currentStreak;
+        }
+      } else if (daysDiff == 2) {
+        // 漏打卡 1 天：自動觸發連勝防護卡
+        if (_profile.streakFreezes > 0) {
+          _profile.streakFreezes--;
+          _profile.streakFreezesUsed++;
+          telemetry.logEvent(
+            eventName: 'STREAK_FREEZE_CONSUMED',
+            parameters: {
+              'preservedStreak': _profile.currentStreak,
+              'remainingFreezes': _profile.streakFreezes,
+            },
+          );
+        } else {
+          _profile.currentStreak = 1;
+        }
+      } else if (daysDiff > 2) {
+        // 漏打卡超過 1 天，連勝中斷
+        _profile.currentStreak = 1;
+      }
+    }
+    _profile.lastLoginDate = now;
+
+    _eventStore.appendEvent(
+      type: StudyEventType.streakMaintained,
+      payload: {
+        'streak': _profile.currentStreak,
+        'freezesRemaining': _profile.streakFreezes,
+      },
+    );
+
+    telemetry.logEvent(
+      eventName: 'APP_LAUNCH',
+      parameters: {
+        'streak': _profile.currentStreak,
+        'freezes': _profile.streakFreezes,
+      },
+    );
+    _scheduleAutoSave();
+  }
 
   // --- Git 分支與里程碑 ---
   SkillCommit commitSkillMilestone(String message) {
@@ -357,22 +440,6 @@ class AppState extends ChangeNotifier {
     return double.parse(avg.clamp(0.0, 100.0).toStringAsFixed(1));
   }
 
-  int get dueForReviewCount {
-    int count = 0;
-    for (final state in _memoryStates.values) {
-      if (AdvancedMemoryEngine.isDueForReview(state)) count++;
-    }
-    return count;
-  }
-
-  List<QuestionItem> get dueQuestions {
-    final dueIds = _memoryStates.entries
-        .where((e) => AdvancedMemoryEngine.isDueForReview(e.value))
-        .map((e) => e.key)
-        .toSet();
-    return _allQuestions.where((q) => dueIds.contains(q.id)).toList();
-  }
-
   MemoryCardState getCardState(String questionId) {
     return _memoryStates[questionId] ?? MemoryCardState(questionId: questionId);
   }
@@ -455,37 +522,10 @@ class AppState extends ChangeNotifier {
     _scheduleAutoSave();
   }
 
-  void _processDailyLoginStreak() {
-    final now = DateTime.now();
-    if (_profile.lastLoginDate == null) {
-      _profile.currentStreak = 1;
-      _profile.longestStreak = 1;
-    } else {
-      final difference = now.difference(_profile.lastLoginDate!).inDays;
-      if (difference == 1) {
-        _profile.currentStreak++;
-        if (_profile.currentStreak > _profile.longestStreak) {
-          _profile.longestStreak = _profile.currentStreak;
-        }
-      } else if (difference > 1) {
-        _profile.currentStreak = 1;
-      }
-    }
-    _profile.lastLoginDate = now;
-
-    _eventStore.appendEvent(
-      type: StudyEventType.streakMaintained,
-      payload: {'streak': _profile.currentStreak},
-    );
-
-    telemetry.logEvent(eventName: 'APP_LAUNCH', parameters: {'streak': _profile.currentStreak});
-    _scheduleAutoSave();
-  }
-
   bool activateLicense(String code) {
     final cleanCode = code.trim().toUpperCase();
     telemetry.logEvent(eventName: 'PAYWALL_ATTEMPT', parameters: {'code': cleanCode});
-    
+
     if (cleanCode == 'VIP888' || cleanCode == 'PASS2026') {
       _profile.licenseTier = LicenseTier.proLifetime;
 
@@ -530,65 +570,65 @@ class AppState extends ChangeNotifier {
       final decodedJson = utf8.decode(base64Decode(cleanToken));
       final Map<String, dynamic> dataMap = jsonDecode(decodedJson);
 
-      if (dataMap.containsKey('user')) {
-        _profile = EnhancedUserProfile.fromMap(Map<String, dynamic>.from(dataMap['user']));
+          if (dataMap.containsKey('user')) {
+            _profile = EnhancedUserProfile.fromMap(Map<String, dynamic>.from(dataMap['user']));
+          }
+
+          if (dataMap.containsKey('memoryStates')) {
+            _memoryStates.clear();
+            final rawMem = Map<String, dynamic>.from(dataMap['memoryStates']);
+            rawMem.forEach((k, v) {
+              _memoryStates[k] = MemoryCardState.fromMap(Map<String, dynamic>.from(v));
+            });
+          }
+
+          if (dataMap.containsKey('eventLogs')) {
+            _eventStore.importEventLogJson(dataMap['eventLogs'] as String);
+          }
+
+          if (dataMap.containsKey('gitBranches')) {
+            _branchManager.importBranchesJson(dataMap['gitBranches'] as String);
+          }
+
+          notifyListeners();
+          return true;
+        } catch (e) {
+          return false;
+        }
       }
 
-      if (dataMap.containsKey('memoryStates')) {
-        _memoryStates.clear();
-        final rawMem = Map<String, dynamic>.from(dataMap['memoryStates']);
-        rawMem.forEach((k, v) {
-          _memoryStates[k] = MemoryCardState.fromMap(Map<String, dynamic>.from(v));
-        });
-      }
+      Future<void> adminImportMassiveQuestionsAsync(List<QuestionItem> newQuestions) async {
+        if (_isProcessingMassiveData) return;
+        _isProcessingMassiveData = true;
+        notifyListeners();
 
-      if (dataMap.containsKey('eventLogs')) {
-        _eventStore.importEventLogJson(dataMap['eventLogs'] as String);
-      }
+        await Future.delayed(const Duration(milliseconds: 50));
 
-      if (dataMap.containsKey('gitBranches')) {
-        _branchManager.importBranchesJson(dataMap['gitBranches'] as String);
-      }
+        List<QuestionItem> cleanNewBatch = [];
+        AerospacePreflightInspector.inspectAndSanitize(
+          rawBank: newQuestions,
+          onBankSanitized: (sanitized) => cleanNewBatch = sanitized,
+        );
 
-      notifyListeners();
-      return true;
-    } catch (e) {
-      return false;
+        final existingIds = _allQuestions.map((q) => q.id).toSet();
+        int addedCount = 0;
+
+        for (var newQ in cleanNewBatch) {
+          if (!existingIds.contains(newQ.id)) {
+            _allQuestions.add(newQ);
+            existingIds.add(newQ.id);
+            addedCount++;
+          }
+        }
+
+        _rebuildBitwiseIndex();
+        _semanticSimilarityCache.clear();
+
+        commitSkillMilestone("admin: 批量注入 $addedCount 道全新考題物料");
+
+        _isProcessingMassiveData = false;
+        telemetry.logEvent(eventName: 'ADMIN_IMPORT', parameters: {'added': addedCount});
+        notifyListeners();
+        _scheduleAutoSave();
+      }
     }
-  }
-
-  Future<void> adminImportMassiveQuestionsAsync(List<QuestionItem> newQuestions) async {
-    if (_isProcessingMassiveData) return;
-    _isProcessingMassiveData = true;
-    notifyListeners();
-
-    await Future.delayed(const Duration(milliseconds: 50));
-
-    List<QuestionItem> cleanNewBatch = [];
-    AerospacePreflightInspector.inspectAndSanitize(
-      rawBank: newQuestions,
-      onBankSanitized: (sanitized) => cleanNewBatch = sanitized,
-    );
-
-    final existingIds = _allQuestions.map((q) => q.id).toSet();
-    int addedCount = 0;
-
-    for (var newQ in cleanNewBatch) {
-      if (!existingIds.contains(newQ.id)) {
-        _allQuestions.add(newQ);
-        existingIds.add(newQ.id);
-        addedCount++;
-      }
-    }
-
-    _rebuildBitwiseIndex();
-    _semanticSimilarityCache.clear();
-
-    commitSkillMilestone("admin: 批量注入 $addedCount 道全新考題物料");
-
-    _isProcessingMassiveData = false;
-    telemetry.logEvent(eventName: 'ADMIN_IMPORT', parameters: {'added': addedCount});
-    notifyListeners();
-    _scheduleAutoSave();
-  }
-}

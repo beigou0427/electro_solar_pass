@@ -1,7 +1,7 @@
 ﻿// ==========================================
 // 專案名稱：電光證照霸 PRO (ElectroSolar Pass)
 // 檔案：lib/screens/dashboard_screen.dart
-// 說明：戰情指揮中心儀表板（App Store 審查合規版）
+// 說明：戰情指揮中心儀表板（整合實力快測入口之完全體）
 // ==========================================
 
 import 'dart:async';
@@ -20,6 +20,8 @@ import '../models/skill_tree_domain.dart';
 import '../models/event_sourcing_store.dart';
 import '../models/git_skill_branch.dart';
 import 'exam_arena_screen.dart';
+import 'quiz_screen.dart';
+import 'placement_test_screen.dart';
 
 enum DiagnosticStatus { pending, running, passed, failed }
 
@@ -144,7 +146,6 @@ class _DashboardArenaViewState extends State<DashboardArenaView> with TickerProv
   Timer? _specTickerTimer;
   int _currentSpecIndex = 0;
 
-  // 100% 客觀技術規格輪播，徹底取代虛擬下單社會認同
   final List<String> _technicalSpecList = const [
     "⚡ 官方真題庫：完整收錄台灣勞動部 813 道最新檢定真題",
     "📐 AST 電學推導：低溫 Voc 修正、線路壓降與功因精算",
@@ -269,7 +270,7 @@ class _DashboardArenaViewState extends State<DashboardArenaView> with TickerProv
                       border: Border.all(color: AppColors.slate800),
                     ),
                     child: Column(
-                      children: tasks.map((t) => _buildDiagnosticTaskRow(t)).toList(),
+                      children: tasks.map<Widget>((t) => _buildDiagnosticTaskRow(t)).toList(),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -306,7 +307,7 @@ class _DashboardArenaViewState extends State<DashboardArenaView> with TickerProv
       });
     }
 
-    // 任務 2: Apple StoreKit 閘道連線 (含 kIsWeb 跨平台保護)
+    // 任務 2: Apple StoreKit 閘道連線
     setModalState(() => tasks[1].status = DiagnosticStatus.running);
     await Future.delayed(const Duration(milliseconds: 500));
     bool iapAvailable = false;
@@ -331,14 +332,12 @@ class _DashboardArenaViewState extends State<DashboardArenaView> with TickerProv
     if (kIsWeb) {
       setModalState(() {
         tasks[2].status = DiagnosticStatus.passed;
-        tasks[2].resultMessage = 'Web 模擬探測：成功映射 3 項產品 (290 / 390 / 590)';
+        tasks[2].resultMessage = 'Web 模擬探測：成功映射 1 項旗艦買斷產品 (590)';
       });
     } else if (iapAvailable) {
       try {
         final response = await InAppPurchase.instance.queryProductDetails({
           'esp_pro_lifetime_590',
-          'esp_pro_30d_290',
-          'esp_pro_180d_390',
         });
         setModalState(() {
           if (response.error != null) {
@@ -769,6 +768,118 @@ class _DashboardArenaViewState extends State<DashboardArenaView> with TickerProv
     );
   }
 
+  // --- 🎯 10分鐘實力落點快測 主行動卡片 ---
+  Widget _buildPlacementTestActionCard() {
+    return _ChunkyActionCard(
+      baseColor: AppColors.blue500,
+      shadowColor: const Color(0xFF1E3A8A),
+      onTap: () {
+        HapticFeedback.heavyImpact();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const PlacementTestScreen()),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.gps_fixed_rounded, color: Colors.white, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    '🎯 10分鐘實力落點快測',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '跨領域抽 15 題，精準診斷最弱死穴',
+                    style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- FSRS 今日待消滅 X 題 主行動卡片 ---
+  Widget _buildDueDeckActionCard(int dueCount) {
+    final bool hasDue = dueCount > 0;
+    return _ChunkyActionCard(
+      baseColor: hasDue ? AppColors.rose500 : AppColors.slate800,
+      shadowColor: hasDue ? const Color(0xFF9F1239) : Colors.black,
+      onTap: () {
+        HapticFeedback.heavyImpact();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ElectroQuizArenaView()),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: hasDue ? Colors.white24 : AppColors.slate700,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                hasDue ? Icons.local_fire_department_rounded : Icons.check_circle_outline_rounded,
+                color: hasDue ? Colors.white : AppColors.emerald400,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hasDue ? '🔥 今日待消滅 $dueCount 題 (FSRS 臨算點)' : '🎉 今日記憶負擔已零清空！狀態最佳',
+                    style: TextStyle(
+                      color: hasDue ? Colors.white : AppColors.emerald400,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    hasDue ? '點擊一鍵發動艾賓浩斯記憶消除戰' : '無任何到達遺忘臨界點之考題，繼續保持！',
+                    style: TextStyle(
+                      color: hasDue ? Colors.white70 : AppColors.slate400,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: hasDue ? Colors.white70 : AppColors.slate400,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildActionFunnel(int wrongCount) {
     return Column(
       children: [
@@ -867,6 +978,8 @@ class _DashboardArenaViewState extends State<DashboardArenaView> with TickerProv
         final total = globalMasterState.totalQuestions;
         final mastered = globalMasterState.masteredCount;
         final wrong = globalMasterState.wrongCount;
+        final dueCount = globalMasterState.dueForReviewCount;
+        final streakFreezes = globalMasterState.profile.streakFreezes;
         final score = total > 0 ? ((mastered / total) * 100).toStringAsFixed(1) : '0.0';
         final reports = globalMasterState.domainMasteryReports;
 
@@ -920,9 +1033,21 @@ class _DashboardArenaViewState extends State<DashboardArenaView> with TickerProv
                 ),
                 const SizedBox(height: 16),
                 _buildSpecTicker(),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+
+                // 🔥 第一防線：FSRS 今日待消滅 X 題
+                _buildDueDeckActionCard(dueCount),
+                const SizedBox(height: 16),
+
+                // 🎯 第二防線：10分鐘實力快測入口
+                _buildPlacementTestActionCard(),
+                const SizedBox(height: 16),
+
+                // 🏅 第三防線：全真模擬考與小抄漏斗
                 _buildActionFunnel(wrong),
                 const SizedBox(height: 24),
+
+                // 🛡️ 打卡紀錄 + 連勝防護卡圖章
                 _GlassPanel(
                   child: Row(
                     children: [
@@ -932,22 +1057,42 @@ class _DashboardArenaViewState extends State<DashboardArenaView> with TickerProv
                         child: const Icon(Icons.local_fire_department_rounded, color: AppColors.rose500, size: 32),
                       ),
                       const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('連續作戰打卡', style: TextStyle(color: AppColors.slate400, fontSize: 12, fontWeight: FontWeight.bold)),
-                          Row(
-                            children: [
-                              Text('${globalMasterState.profile.currentStreak} 天', style: const TextStyle(color: AppColors.slate50, fontSize: 24, fontWeight: FontWeight.w900)),
-                              const SizedBox(width: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(color: AppColors.slate800, borderRadius: BorderRadius.circular(6)),
-                                child: Text('最高 ${globalMasterState.profile.longestStreak} 天', style: const TextStyle(color: AppColors.amber400, fontSize: 11, fontWeight: FontWeight.bold)),
-                              )
-                            ],
-                          )
-                        ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('連續作戰打卡', style: TextStyle(color: AppColors.slate400, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.blue500.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: AppColors.blue500.withOpacity(0.4)),
+                                  ),
+                                  child: Text(
+                                    '🛡️ 護卡: $streakFreezes 張',
+                                    style: const TextStyle(color: AppColors.blue500, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Text('${globalMasterState.profile.currentStreak} 天', style: const TextStyle(color: AppColors.slate50, fontSize: 24, fontWeight: FontWeight.w900)),
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(color: AppColors.slate800, borderRadius: BorderRadius.circular(6)),
+                                  child: Text('最高 ${globalMasterState.profile.longestStreak} 天', style: const TextStyle(color: AppColors.amber400, fontSize: 11, fontWeight: FontWeight.bold)),
+                                )
+                              ],
+                            )
+                          ],
+                        ),
                       )
                     ],
                   ),
