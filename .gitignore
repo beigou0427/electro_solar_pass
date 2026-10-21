@@ -96,3 +96,16 @@ key.properties
 
 *.p8
 asc_auto_provision.dart
+
+# === ElectroSolar Pass PRO 專屬隔離區 ===
+# 嚴禁將本機持久化進度與金鑰上傳至 GitHub
+.storage_battle_state.dat
+*.dat
+.env
+config.json
+
+# === Mac / iOS 暫存檔隔離 ===
+.DS_Store
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.podspec

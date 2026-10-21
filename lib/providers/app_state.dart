@@ -1,12 +1,14 @@
 ﻿// ==========================================
 // 專案名稱：電光證照霸 PRO (ElectroSolar Pass)
 // 檔案：lib/providers/app_state.dart
-// 說明：[全域狀態完全體] 整合連勝防護卡、FSRS 記憶、Git 分支、DDD 技能樹
+// 說明：[全域狀態完全體] 整合連勝防護、FSRS 記憶、Git 分支與全域 IAP 漏單防護 (Apple 合規版)
 // ==========================================
 
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:in_app_purchase/in_app_purchase.dart'; // 🍎 引入 Apple IAP 官方套件
 import '../models/core_types.dart';
 import '../data/question_bank.dart';
 import '../utils/telemetry_logger.dart';
@@ -84,12 +86,71 @@ class AppState extends ChangeNotifier {
   CognitiveState _cognitiveState = CognitiveState.initial();
   final SkillBranchManager _branchManager = SkillBranchManager();
 
+  // 🍎 Apple IAP 全域漏單防護狀態
+  StreamSubscription<List<PurchaseDetails>>? _iapSubscription;
+  bool _isPurchasePending = false;
+  String _iapErrorMessage = '';
+
   Timer? _debounceSaveTimer;
 
   AppState() {
     _runPreflightDiagnostic();
     _initGitGenesisCommit();
     _loadStateFromDisk();
+    _initializeIAPStream(); // 🚀 App 開機即刻掛載 IAP 監聽器
+  }
+
+  // --- 🍎 Apple IAP 全域監聽器初始化 ---
+  void _initializeIAPStream() {
+    if (kIsWeb) return; // Web 模式下略過 StoreKit 初始化
+
+    final Stream<List<PurchaseDetails>> purchaseUpdated = InAppPurchase.instance.purchaseStream;
+    _iapSubscription = purchaseUpdated.listen(
+      (purchaseDetailsList) {
+        _listenToPurchaseUpdated(purchaseDetailsList);
+      },
+      onDone: () => _iapSubscription?.cancel(),
+      onError: (error) {
+        _iapErrorMessage = error.toString();
+        notifyListeners();
+        telemetry.logEvent(eventName: 'IAP_GLOBAL_STREAM_ERROR', parameters: {'error': _iapErrorMessage});
+      },
+    );
+  }
+
+  // --- 🍎 Apple IAP 全域漏單處理核心 ---
+  void _listenToPurchaseUpdated(List<PurchaseDetails> purchaseDetailsList) {
+    for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
+      if (purchaseDetails.status == PurchaseStatus.pending) {
+        _isPurchasePending = true;
+        notifyListeners();
+      } else {
+        _isPurchasePending = false;
+        
+        if (purchaseDetails.status == PurchaseStatus.error) {
+          _iapErrorMessage = purchaseDetails.error?.message ?? '未知交易錯誤';
+          telemetry.logEvent(eventName: 'IAP_TRANSACTION_ERROR', parameters: {'error': _iapErrorMessage});
+        } 
+        else if (purchaseDetails.status == PurchaseStatus.purchased ||
+                 purchaseDetails.status == PurchaseStatus.restored) {
+          
+          // 🍎 交易成功，無條件放行啟用 PRO (由 Apple 伺服器與 StoreKit 把關)
+          activateLicense('AppleStoreKit_Verified');
+          
+          telemetry.logEvent(
+            eventName: purchaseDetails.status == PurchaseStatus.restored ? 'IAP_RESTORED' : 'IAP_PURCHASED',
+            parameters: {'productId': purchaseDetails.productID},
+          );
+        }
+
+        // 🛑 【合規關鍵】：必須呼叫 completePurchase 關閉交易，否則會被 Apple 判定為未正確履行交付
+        if (purchaseDetails.pendingCompletePurchase) {
+          InAppPurchase.instance.completePurchase(purchaseDetails);
+        }
+        
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> _loadStateFromDisk() async {
@@ -165,6 +226,10 @@ class AppState extends ChangeNotifier {
   CognitiveState get cognitiveState => _cognitiveState;
   SkillBranchManager get branchManager => _branchManager;
   String get activeBranch => _branchManager.activeBranch;
+  
+  // 暴露 IAP 全域狀態供 Paywall 畫面綁定
+  bool get isPurchasePending => _isPurchasePending;
+  String get iapErrorMessage => _iapErrorMessage;
 
   int get totalQuestions => _allQuestions.length;
   int get masteredCount => _profile.masteredIds.length;
@@ -522,26 +587,24 @@ class AppState extends ChangeNotifier {
     _scheduleAutoSave();
   }
 
-  bool activateLicense(String code) {
-    final cleanCode = code.trim().toUpperCase();
-    telemetry.logEvent(eventName: 'PAYWALL_ATTEMPT', parameters: {'code': cleanCode});
+  // 🍎 [審查合規重構] 拔除 VIP 硬編碼校驗，依賴呼叫端 (StoreKit/DevHidden) 確保安全
+  bool activateLicense(String source) {
+    final cleanSource = source.trim();
+    telemetry.logEvent(eventName: 'PAYWALL_ATTEMPT', parameters: {'source': cleanSource});
 
-    if (cleanCode == 'VIP888' || cleanCode == 'PASS2026') {
-      _profile.licenseTier = LicenseTier.proLifetime;
+    _profile.licenseTier = LicenseTier.proLifetime;
 
-      _eventStore.appendEvent(
-        type: StudyEventType.licenseUnlocked,
-        payload: {'code': cleanCode, 'tier': 'PRO'},
-      );
+    _eventStore.appendEvent(
+      type: StudyEventType.licenseUnlocked,
+      payload: {'source': cleanSource, 'tier': 'PRO'},
+    );
 
-      commitSkillMilestone("finance: 啟用 PRO 旗艦版終身權限");
-      telemetry.logEvent(eventName: 'PAYWALL_SUCCESS', parameters: {'tier': 'PRO'});
-      notifyListeners();
-      _scheduleAutoSave();
-      return true;
-    }
-    telemetry.logEvent(eventName: 'PAYWALL_FAILED', parameters: {'reason': 'invalid_code'});
-    return false;
+    commitSkillMilestone("finance: 啟用 PRO 旗艦版終身權限 ($cleanSource)");
+    telemetry.logEvent(eventName: 'PAYWALL_SUCCESS', parameters: {'tier': 'PRO', 'source': cleanSource});
+    notifyListeners();
+    _scheduleAutoSave();
+    
+    return true;
   }
 
   String exportStateBackup() {
@@ -570,65 +633,65 @@ class AppState extends ChangeNotifier {
       final decodedJson = utf8.decode(base64Decode(cleanToken));
       final Map<String, dynamic> dataMap = jsonDecode(decodedJson);
 
-          if (dataMap.containsKey('user')) {
-            _profile = EnhancedUserProfile.fromMap(Map<String, dynamic>.from(dataMap['user']));
-          }
-
-          if (dataMap.containsKey('memoryStates')) {
-            _memoryStates.clear();
-            final rawMem = Map<String, dynamic>.from(dataMap['memoryStates']);
-            rawMem.forEach((k, v) {
-              _memoryStates[k] = MemoryCardState.fromMap(Map<String, dynamic>.from(v));
-            });
-          }
-
-          if (dataMap.containsKey('eventLogs')) {
-            _eventStore.importEventLogJson(dataMap['eventLogs'] as String);
-          }
-
-          if (dataMap.containsKey('gitBranches')) {
-            _branchManager.importBranchesJson(dataMap['gitBranches'] as String);
-          }
-
-          notifyListeners();
-          return true;
-        } catch (e) {
-          return false;
-        }
+      if (dataMap.containsKey('user')) {
+        _profile = EnhancedUserProfile.fromMap(Map<String, dynamic>.from(dataMap['user']));
       }
 
-      Future<void> adminImportMassiveQuestionsAsync(List<QuestionItem> newQuestions) async {
-        if (_isProcessingMassiveData) return;
-        _isProcessingMassiveData = true;
-        notifyListeners();
+      if (dataMap.containsKey('memoryStates')) {
+        _memoryStates.clear();
+        final rawMem = Map<String, dynamic>.from(dataMap['memoryStates']);
+        rawMem.forEach((k, v) {
+          _memoryStates[k] = MemoryCardState.fromMap(Map<String, dynamic>.from(v));
+        });
+      }
 
-        await Future.delayed(const Duration(milliseconds: 50));
+      if (dataMap.containsKey('eventLogs')) {
+        _eventStore.importEventLogJson(dataMap['eventLogs'] as String);
+      }
 
-        List<QuestionItem> cleanNewBatch = [];
-        AerospacePreflightInspector.inspectAndSanitize(
-          rawBank: newQuestions,
-          onBankSanitized: (sanitized) => cleanNewBatch = sanitized,
-        );
+      if (dataMap.containsKey('gitBranches')) {
+        _branchManager.importBranchesJson(dataMap['gitBranches'] as String);
+      }
 
-        final existingIds = _allQuestions.map((q) => q.id).toSet();
-        int addedCount = 0;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
-        for (var newQ in cleanNewBatch) {
-          if (!existingIds.contains(newQ.id)) {
-            _allQuestions.add(newQ);
-            existingIds.add(newQ.id);
-            addedCount++;
-          }
-        }
+  Future<void> adminImportMassiveQuestionsAsync(List<QuestionItem> newQuestions) async {
+    if (_isProcessingMassiveData) return;
+    _isProcessingMassiveData = true;
+    notifyListeners();
 
-        _rebuildBitwiseIndex();
-        _semanticSimilarityCache.clear();
+    await Future.delayed(const Duration(milliseconds: 50));
 
-        commitSkillMilestone("admin: 批量注入 $addedCount 道全新考題物料");
+    List<QuestionItem> cleanNewBatch = [];
+    AerospacePreflightInspector.inspectAndSanitize(
+      rawBank: newQuestions,
+      onBankSanitized: (sanitized) => cleanNewBatch = sanitized,
+    );
 
-        _isProcessingMassiveData = false;
-        telemetry.logEvent(eventName: 'ADMIN_IMPORT', parameters: {'added': addedCount});
-        notifyListeners();
-        _scheduleAutoSave();
+    final existingIds = _allQuestions.map((q) => q.id).toSet();
+    int addedCount = 0;
+
+    for (var newQ in cleanNewBatch) {
+      if (!existingIds.contains(newQ.id)) {
+        _allQuestions.add(newQ);
+        existingIds.add(newQ.id);
+        addedCount++;
       }
     }
+
+    _rebuildBitwiseIndex();
+    _semanticSimilarityCache.clear();
+
+    commitSkillMilestone("admin: 批量注入 $addedCount 道全新考題物料");
+
+    _isProcessingMassiveData = false;
+    telemetry.logEvent(eventName: 'ADMIN_IMPORT', parameters: {'added': addedCount});
+    notifyListeners();
+    _scheduleAutoSave();
+  }
+}
