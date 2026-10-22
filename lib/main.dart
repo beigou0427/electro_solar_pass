@@ -1,7 +1,7 @@
-﻿// ==========================================
+// ==========================================
 // 專案名稱：電光證照霸 PRO (ElectroSolar Pass)
 // 檔案：lib/main.dart
-// 說明：[主程式入口] 原生 StoreKit 單一買斷金流探測與自檢引導
+// 說明：[主程式入口] 非阻塞極速秒開與 Watchdog 防禦完全體
 // ==========================================
 
 import 'dart:async';
@@ -22,46 +22,10 @@ import 'screens/paywall_screen.dart';
 // 【全域大腦初始化】
 final AppState globalMasterState = AppState();
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ==========================================
-  // 🚀 [SYSTEM BOOT] 原生 StoreKit 開機自檢探測
-  // ==========================================
-  if (kDebugMode) {
-    debugPrint('\n=================================================================');
-    debugPrint('🚀 [SYSTEM BOOT] 啟動電光證照霸 PRO 任務關鍵自檢程序...');
-    debugPrint('📡 [IAP GATEWAY] 實施 In-App Purchase 支付架構深度探測：');
-    debugPrint('  • 註冊 Bundle ID: com.electrosolar.pass.pro');
-    debugPrint('  • 核心商品: 雙證照終身買斷旗艦包 | ID: esp_pro_lifetime_590 | NT\$ 590');
-
-    if (kIsWeb) {
-      debugPrint('  • 當前執行環境: Chrome Web (開發沙盒環境)');
-      debugPrint('  • 閘道通訊狀態: 🟢 READY (在 iOS 真機將自動啟動 Apple StoreKit)');
-      debugPrint('  • 本地收銀台防護: 🟢 ENABLED (醫療級防連擊鎖定盾就緒)');
-    } else {
-      try {
-        debugPrint('  • 當前執行環境: 原生 iOS / macOS 設備');
-        debugPrint('  • 正在向 Apple 伺服器發起 StoreKit 握手...');
-        final bool iapAvailable = await InAppPurchase.instance.isAvailable();
-        if (iapAvailable) {
-          debugPrint('  • 閘道通訊狀態: 🟢 CONNECTED (StoreKit 連線成功)');
-          final response = await InAppPurchase.instance.queryProductDetails(
-            {'esp_pro_lifetime_590'},
-          );
-          debugPrint('  • 實彈拉取商品數: ${response.productDetails.length} 項');
-        } else {
-          debugPrint('  • 閘道通訊狀態: ⚠️ UNAVAILABLE (設備受限或未登入 Apple ID)');
-        }
-      } catch (e) {
-        debugPrint('  • 探測異常: $e');
-      }
-    }
-    debugPrint('✅ [IAP PRE-FLIGHT] 內購金流架構驗證完成！');
-    debugPrint('=================================================================\n');
-  }
-
-  // 全域異常攔截器
+  // 1. 全域異常安全隔離盾
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     telemetry.logEvent(
@@ -73,46 +37,27 @@ void main() async {
     );
   };
 
-  ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
-    return Scaffold(
-      backgroundColor: AppColors.slate950,
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.shield_rounded, size: 64, color: AppColors.amber400),
-              const SizedBox(height: 16),
-              const Text(
-                '🛡️ 系統故障隔離防護中',
-                style: TextStyle(color: AppColors.slate50, fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '系統偵測到渲染端異常，已啟動自動安全隔離。\n您的學習進度均完整固化在本地記憶體中。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.slate400, fontSize: 13, height: 1.5),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () => runApp(const ElectroSolarPassHeroApp()),
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('重啟系統 (Safe Reboot)'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.emerald400,
-                  foregroundColor: AppColors.slate950,
-                  minimumSize: const Size(200, 48),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  };
-
+  // 2. 🚀 【核心防禦】：先啟動畫面 (runApp)，0 延遲秒開進大廳，絕對不阻塞首幀！
   runApp(const ElectroSolarPassHeroApp());
+
+  // 3. StoreKit 探測改為「背景非同步」，徹底封殺 iOS Watchdog 19.5秒超時閃退
+  if (kDebugMode) {
+    _runAsyncStoreKitPreflight();
+  }
+}
+
+void _runAsyncStoreKitPreflight() async {
+  debugPrint('\n=================================================================');
+  debugPrint('🚀 [SYSTEM BOOT] 啟動電光證照霸 PRO 背景非同步自檢程序...');
+  if (!kIsWeb) {
+    try {
+      final bool iapAvailable = await InAppPurchase.instance.isAvailable();
+      debugPrint('  • StoreKit 狀態: ${iapAvailable ? "🟢 就緒" : "⚠️ 離線/未就緒"}');
+    } catch (e) {
+      debugPrint('  • 探測異常 (已優雅隔離): $e');
+    }
+  }
+  debugPrint('=================================================================\n');
 }
 
 class ElectroSolarPassHeroApp extends StatelessWidget {
@@ -121,7 +66,8 @@ class ElectroSolarPassHeroApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '電光證照霸 PRO',
+      // 🍎 與桌面名稱、審查文案保持 1:1 絕對一致
+      title: '電光證照霸 PRO - 乙級室內配線',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
       home: const DashboardShellNavigator(),

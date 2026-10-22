@@ -1,7 +1,7 @@
 name: electro_solar_pass
-description: "電光證照霸 PRO"
+description: "電光證照霸 PRO - 00700 乙級室內配線檢定衝刺"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.11.5
@@ -11,8 +11,8 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   in_app_purchase: ^3.3.1
-  http: ^1.6.0
-  dart_jsonwebtoken: ^3.4.1
+  http: ^1.2.0
+  dart_jsonwebtoken: ^2.14.0
 
 dev_dependencies:
   flutter_test:
@@ -26,7 +26,7 @@ flutter:
   assets:
     - assets/images/
 
-flutter_icons:
+flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/images/app_icon_master.png"
@@ -39,7 +39,7 @@ flutter_native_splash:
   color_dark: "#020617"
   image: "assets/images/app_icon_master.png"
   image_dark: "assets/images/app_icon_master.png"
-  web: false # 🛡️ 關閉 Web 生成，避開 1x1 像素編碼 Bug
+  web: false
   android_12:
     color: "#0F172A"
     color_dark: "#020617"
